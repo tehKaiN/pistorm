@@ -10,19 +10,32 @@
 
 class tI2c {
 public:
-	tI2c(const std::string &Port);
+	tI2c(const std::string &Port, bool isCombinedRw);
 
 	bool write(uint8_t ubAddr, const std::vector<uint8_t> &vData);
 
 	bool read(uint8_t ubAddr, uint8_t *pDest, uint32_t ulReadSize);
 
+	bool writeRead(
+		uint8_t ubAddr, const std::vector<uint8_t> &vData,
+		uint8_t *pReadDest, uint32_t ulReadSize
+	);
+
 	template <typename t_tContainer>
 	bool read(uint8_t ubAddr, t_tContainer &Cont) {
-		return read(ubAddr, Cont.data(), Cont.size());
+		return read(ubAddr, Cont.data(), Cont.size() * sizeof(Cont[0]));
+	}
+
+	template <typename t_tContainer>
+	bool writeRead(
+		uint8_t ubAddr, const std::vector<uint8_t> &vData, t_tContainer &Cont
+	) {
+		return writeRead(ubAddr, vData, Cont.data(), Cont.size() * sizeof(Cont[0]));
 	}
 
 private:
 	int m_I2cHandle;
+	bool m_isCombinedRw;
 };
 
 #endif // _I2C_HPP_

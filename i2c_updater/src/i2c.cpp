@@ -8,9 +8,11 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
+#include <linux/i2c.h>
 #include <stdexcept>
 
-tI2c::tI2c(const std::string &Port)
+tI2c::tI2c(const std::string &Port, bool isCombinedRw):
+	m_isCombinedRw(isCombinedRw)
 {
 	// Open the I2C bus file handle
 	m_I2cHandle = open(Port.c_str(), O_RDWR);
@@ -20,7 +22,8 @@ tI2c::tI2c(const std::string &Port)
 	}
 }
 
-bool tI2c::write(uint8_t ubAddr, const std::vector<uint8_t> &vData) {
+bool tI2c::write(uint8_t ubAddr, const std::vector<uint8_t> &vData)
+{
 	if(ioctl(m_I2cHandle, I2C_SLAVE, ubAddr) < 0) {
 		// NOTE: check errno to see what went wrong
 		return false;
@@ -34,7 +37,8 @@ bool tI2c::write(uint8_t ubAddr, const std::vector<uint8_t> &vData) {
 	return true;
 }
 
-bool tI2c::read(uint8_t ubAddr, uint8_t *pDest, uint32_t ulReadSize) {
+bool tI2c::read(uint8_t ubAddr, uint8_t *pDest, uint32_t ulReadSize)
+{
 	if(ioctl(m_I2cHandle, I2C_SLAVE, ubAddr) < 0) {
 		// NOTE: check errno to see what went wrong
 		return false;
@@ -47,3 +51,37 @@ bool tI2c::read(uint8_t ubAddr, uint8_t *pDest, uint32_t ulReadSize) {
 
 	return true;
 }
+
+bool tI2c::writeRead(
+	uint8_t ubAddr, const std::vector<uint8_t> &vData,
+	uint8_t *pReadDest, uint32_t ulReadSize
+)
+{
+	bool isOk = false;
+	if(m_isCombinedRw) {
+		struct i2c_msg pMsgs[2];
+		struct i2c_rdwr_ioctl_data MsgSet;
+
+		// Write message
+		pMsgs[0].addr = ubAddr;
+		pMsgs[0].flags = 0;
+		pMsgs[0].buf = const_cast<uint8_t*>(vData.data());
+		pMsgs[0].len = vData.size();
+
+		// Read message
+		pMsgs[0].addr = ubAddr;
+		pMsgs[0].flags = I2C_M_RD;
+		pMsgs[0].buf = pReadDest;
+		pMsgs[0].len = ulReadSize;
+
+		MsgSet.msgs = pMsgs;
+    MsgSet.nmsgs = 2;
+		auto Result = ioctl(m_I2cHandle, I2C_RDWR, &MsgSet);
+		isOk = (Result >= 0);
+	}
+	else {
+		isOk = write(ubAddr, vData) && read(ubAddr, pReadDest, ulReadSize);
+	}
+	return isOk;
+}
+

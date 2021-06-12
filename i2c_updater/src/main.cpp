@@ -20,9 +20,9 @@ static bool waitForNotBusy(tI2c &I2c, uint8_t ubFpgaAddr)
 	uint32_t ulStatus;
 	do {
 		std::this_thread::sleep_for(10ms);
-		I2c.write(ubFpgaAddr, {0x3C, 0x00, 0x00 , 0x00});
-		bool isRead = I2c.read(
-			ubFpgaAddr, reinterpret_cast<uint8_t*>(&ulStatus), sizeof(ulStatus)
+		bool isRead = I2c.writeRead(
+			ubFpgaAddr, {0x3C, 0x00, 0x00 , 0x00},
+			reinterpret_cast<uint8_t*>(&ulStatus), sizeof(ulStatus)
 		);
 		if(!isRead) {
 			return false;
@@ -46,9 +46,18 @@ int main(int lArgCount, const char *pArgs[])
 	using namespace std::chrono_literals;
 
 	if(lArgCount < 4) {
-		printf("Usage:\n\t%s i2cPort i2cSlaveAddrHex /path/to/cfg.bit\n", pArgs[0]);
+		printf("Usage:\n\t%s i2cPort i2cSlaveAddrHex /path/to/cfg.bit [-rw]\n", pArgs[0]);
 		printf("e.g.:\n\t%s /dev/i2c-1 5a file.bit\n", pArgs[0]);
 		return EXIT_FAILURE;
+	}
+
+	bool isCombinedRw = false;
+	for(auto i = 4; i < lArgCount; ++i) {
+		std::string Arg(pArgs[i]);
+		if(Arg == "-rw") {
+			isCombinedRw = true;
+			printf("OPT: Using combined I2C R/W operations\n");
+		}
 	}
 
 	std::optional<tBitstream> Bitstream;
@@ -74,7 +83,7 @@ int main(int lArgCount, const char *pArgs[])
 	// Initialize I2C port
 	std::optional<tI2c> I2c;
 	try {
-		I2c = tI2c(pArgs[1]);
+		I2c = tI2c(pArgs[1], isCombinedRw);
 	}
 	catch(const std::exception &Exc) {
 		printf(
@@ -92,9 +101,8 @@ int main(int lArgCount, const char *pArgs[])
 
 	// 1. Read ID (E0)
 	printf("Checking device id...\n");
-	I2c->write(FpgaAddr, {0xE0, 0x00, 0x00, 0x00});
 	std::array<uint8_t, 4> DevId;
-	bool isRead = I2c->read(FpgaAddr, DevId);
+	bool isRead = I2c->writeRead(FpgaAddr, {0xE0, 0x00, 0x00, 0x00}, DevId);
 	if(!isRead) {
 		printf("ERR: Can't read data from I2C device\n");
 		return EXIT_FAILURE;
